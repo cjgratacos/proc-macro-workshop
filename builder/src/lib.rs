@@ -1,12 +1,20 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::parse_macro_input;
-use syn::DeriveInput;
+use syn::{parse_macro_input, DeriveInput};
+
+fn ty_is_option(f: &syn::Field) -> Option<&syn::Type> {
+    if let syn::Type::Path(ref p) = f.ty {
+        p.path.segments.len() == 1 && p.path.segments[0].ident == "Option";
+        return None;
+    }
+    None
+}
 
 #[proc_macro_derive(Builder)]
 pub fn derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     let name = &ast.ident;
+
     let builder_name = format!("{}Builder", &name);
     let builder_identifier = syn::Ident::new(&builder_name, name.span());
     let fields = if let syn::Data::Struct(syn::DataStruct {
@@ -26,7 +34,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
         false
     };
 
-    let optionalized = fields.iter().map(|f| {
+    let build_optionalized = fields.iter().map(|f| {
         let name = &f.ident;
         let ty = &f.ty;
         if ty_is_option(f) {
@@ -35,7 +43,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
         quote! { #name: std::option::Option<#ty> }
     });
 
-    let build = fields.iter().map(|f| {
+    let build_result = fields.iter().map(|f| {
         let name = &f.ident;
 
         if ty_is_option(&f) {
@@ -45,12 +53,12 @@ pub fn derive(input: TokenStream) -> TokenStream {
         quote! { #name: self.#name.clone().ok_or(concat!("'",stringify!(#name),"' is not set."))? }
     });
 
-    let initialized = fields.iter().map(|f| {
+    let build_initial = fields.iter().map(|f| {
         let name = &f.ident;
         quote! { #name: None }
     });
 
-    let methods = fields.iter().map(|f| {
+    let build_methods = fields.iter().map(|f| {
         let name = &f.ident;
         let ty = &f.ty;
         if ty_is_option(f) {
@@ -72,22 +80,22 @@ pub fn derive(input: TokenStream) -> TokenStream {
     // println!("{:#?}", ast);
     let expanded = quote! {
         struct #builder_identifier {
-            #(#optionalized,)*
+            #(#build_optionalized,)*
         }
         impl #builder_identifier {
 
-            #(#methods)*
+            #(#build_methods)*
 
             pub fn build(&self) -> Result<#name, Box<dyn std::error::Error>> {
                 Ok(#name {
-                    #(#build,)*
+                    #(#build_result,)*
                 })
             }
         }
         impl #name {
             fn builder() -> #builder_identifier {
                 #builder_identifier {
-                    #(#initialized,)*
+                    #(#build_initial,)*
                 }
             }
         }
