@@ -54,15 +54,17 @@
 
 use derive_builder::Builder;
 
+type Option = ();
+type Some = ();
+type None = ();
+type Result = ();
+type Box = ();
+
 #[derive(Builder)]
 pub struct Command {
     executable: String,
-    #[builder(each = "arg")]
-    args: Vec<String>,
-    #[builder(each = "env")]
-    env: Vec<String>,
-    current_dir: Option<String>,
 }
+
 fn main() {
     let builder = Command::builder();
 

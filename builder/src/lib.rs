@@ -1,7 +1,5 @@
 use proc_macro::TokenStream;
-use proc_macro2::TokenTree;
-use quote::{quote, ToTokens};
-use syn::spanned::Spanned;
+use quote::quote;
 use syn::{parse_macro_input, DeriveInput};
 
 fn ty_inner_type<'a>(wrapper: &'a str, ty: &'a syn::Type) -> Option<&'a syn::Type> {
@@ -19,24 +17,42 @@ fn ty_inner_type<'a>(wrapper: &'a str, ty: &'a syn::Type) -> Option<&'a syn::Typ
     None
 }
 
+fn mk_err<T: quote::ToTokens>(t: T) -> Option<(bool, proc_macro2::TokenStream)> {
+    Some((
+        false,
+        syn::Error::new_spanned(t, "expected `builder(each = \"...\")`").to_compile_error(),
+    ))
+}
+
 fn extend_method(f: &syn::Field) -> Option<(bool, proc_macro2::TokenStream)> {
     let g = builder_of(f)?;
+
     let meta = match g.parse_meta() {
-        Ok(syn::Meta::NameValue(i)) => i,
+        Ok(syn::Meta::List(mut nvs)) => {
+            assert_eq!(nvs.path.get_ident().unwrap(), "builder");
+
+            if nvs.nested.len() != 1 {
+                return mk_err(nvs);
+            }
+
+            match nvs.nested.pop().unwrap().into_value() {
+                syn::NestedMeta::Meta(syn::Meta::NameValue(nv)) => {
+                    if nv.path.get_ident().unwrap() != "each" {
+                        return mk_err(nvs);
+                    }
+
+                    nv
+                }
+                meta => {
+                    return mk_err(meta);
+                }
+            }
+        }
         Ok(meta) => {
-            return Some((
-                false,
-                syn::Error::new(meta.span(), "expected `builder(each = \"...\")`")
-                    .to_compile_error(),
-            ));
+            return mk_err(meta);
         }
         Err(err) => {
-            return Some((
-                false,
-                err
-                    // syn::Error::new(f.attrs[0].span(), "expected `builder(each = \"...\")`")
-                    .to_compile_error(),
-            ));
+            return Some((false, err.to_compile_error()));
         }
     };
 
@@ -109,9 +125,9 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let build_initial = fields.iter().map(|f| {
         let name = &f.ident;
         if builder_of(f).is_some() {
-            quote! { #name: Vec::new() }
+            quote! { #name: std::vec::Vec::new() }
         } else {
-            quote! { #name: None }
+            quote! { #name: std::option::Option::None }
         }
     });
 
@@ -121,7 +137,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
         let method = if let Some(inner_ty) = ty_inner_type("Option", ty) {
             quote! {
                 pub fn #name(&mut self, #name: #inner_ty) -> &mut Self {
-                    self.#name = Some(#name);
+                    self.#name = std::option::Option::Some(#name);
                     self
                 }
             }
@@ -135,7 +151,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
         } else {
             quote! {
                 pub fn #name(&mut self, #name: #ty) -> &mut Self {
-                    self.#name = Some(#name);
+                    self.#name = std::option::Option::Some(#name);
                     self
                 }
             }
@@ -161,7 +177,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
             #(#build_methods)*
 
-            pub fn build(&self) -> Result<#name, Box<dyn std::error::Error>> {
+            pub fn build(&self) -> std::result::Result<#name, std::boxed::Box<dyn std::error::Error>> {
                 Ok(#name {
                     #(#build_result,)*
                 })
