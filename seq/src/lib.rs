@@ -1,8 +1,11 @@
 use proc_macro::TokenStream;
-
+use quote::quote;
+use syn::{parse_macro_input, DeriveInput};
 #[proc_macro]
 pub fn seq(input: TokenStream) -> TokenStream {
-    let _ = input;
+    let _ast = parse_macro_input!(input as DeriveInput);
 
-    unimplemented!()
+    let extended = quote! {/**/};
+
+    extended.into()
 }

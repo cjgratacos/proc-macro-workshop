@@ -52,21 +52,12 @@
 //   - Joining together the type name + "Builder" to make the builder's name:
 //     https://docs.rs/syn/1.0/syn/struct.Ident.html
 
-use derive_builder::Builder;
+use derive_debug::CustomDebug;
 
-type Option = ();
-type Some = ();
-type None = ();
-type Result = ();
-type Box = ();
-
-#[derive(Builder)]
-pub struct Command {
-    executable: String,
+#[derive(CustomDebug)]
+pub struct Field {
+    name: &'static str,
+    bitmask: u16,
 }
 
-fn main() {
-    let builder = Command::builder();
-
-    let _ = builder;
-}
+fn main() {}
