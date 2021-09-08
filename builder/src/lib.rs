@@ -1,6 +1,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenTree;
-use quote::quote;
+use quote::{quote, ToTokens};
+use syn::spanned::Spanned;
 use syn::{parse_macro_input, DeriveInput};
 
 fn ty_inner_type<'a>(wrapper: &'a str, ty: &'a syn::Type) -> Option<&'a syn::Type> {
@@ -20,24 +21,26 @@ fn ty_inner_type<'a>(wrapper: &'a str, ty: &'a syn::Type) -> Option<&'a syn::Typ
 
 fn extend_method(f: &syn::Field) -> Option<(bool, proc_macro2::TokenStream)> {
     let g = builder_of(f)?;
-    let mut tokens = g.stream().into_iter();
-
-    match tokens.next().unwrap() {
-        TokenTree::Ident(ref i) => assert_eq!(i, "each"),
-        tt => panic!("expected 'each', found {}", tt),
+    let meta = match g.parse_meta() {
+        Ok(syn::Meta::NameValue(i)) => i,
+        Ok(meta) => {
+            return Some((
+                false,
+                syn::Error::new(meta.span(), "expected `builder(each = \"...\")`")
+                    .to_compile_error(),
+            ));
+        }
+        Err(err) => {
+            return Some((
+                false,
+                err
+                    // syn::Error::new(f.attrs[0].span(), "expected `builder(each = \"...\")`")
+                    .to_compile_error(),
+            ));
+        }
     };
 
-    match tokens.next().unwrap() {
-        TokenTree::Punct(ref p) => assert_eq!(p.as_char(), '='),
-        tt => panic!("expected '=', found {}", tt),
-    };
-
-    let arg = match tokens.next().unwrap() {
-        TokenTree::Literal(l) => l,
-        tt => panic!("expected a literal value, found {}", tt),
-    };
-
-    let arg = match syn::Lit::new(arg) {
+    let arg = match meta.lit {
         syn::Lit::Str(s) => syn::Ident::new(&s.value(), s.span()),
         tt => panic!("expected string, found {:?}", tt),
     };
@@ -56,12 +59,10 @@ fn extend_method(f: &syn::Field) -> Option<(bool, proc_macro2::TokenStream)> {
     ))
 }
 
-fn builder_of(f: &syn::Field) -> Option<proc_macro2::Group> {
+fn builder_of(f: &syn::Field) -> Option<&syn::Attribute> {
     for attr in &f.attrs {
         if attr.path.segments.len() == 1 && attr.path.segments.first().unwrap().ident == "builder" {
-            if let Some(proc_macro2::TokenTree::Group(g)) = attr.tokens.clone().into_iter().next() {
-                return Some(g);
-            }
+            return Some(attr);
         }
     }
     None
