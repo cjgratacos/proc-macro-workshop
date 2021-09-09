@@ -52,12 +52,10 @@
 //   - Joining together the type name + "Builder" to make the builder's name:
 //     https://docs.rs/syn/1.0/syn/struct.Ident.html
 
-use derive_debug::CustomDebug;
+use seq::seq;
 
-#[derive(CustomDebug)]
-pub struct Field {
-    name: &'static str,
-    bitmask: u16,
-}
+seq!(N in 0..8 {
+    // nothing
+});
 
 fn main() {}
